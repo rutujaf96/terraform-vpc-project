@@ -1,4 +1,14 @@
+# Terraform files
 .terraform/
 *.tfstate
-*.tfstate.backup
-terraform.tfvars
+*.tfstate.*
+crash.log
+
+# Terraform variables with secrets
+*.tfvars
+
+# SSH keys
+*.pem
+
+# Ansible temporary files
+*.retry
