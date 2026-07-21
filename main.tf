@@ -13,15 +13,46 @@ module "subnet" {
 
   vpc_id = module.vpc.vpc_id
 
-  public_subnet = var.public_subnet
-
+  public_subnet  = var.public_subnet
   private_subnet = var.private_subnet
 
-  availability_zone_public = var.availability_zone_public
-
+  availability_zone_public  = var.availability_zone_public
   availability_zone_private = var.availability_zone_private
 
 }
+
+
+# Internet Gateway Module
+
+module "internet_gateway" {
+
+  source = "./modules/internet_gateway"
+
+  vpc_id = module.vpc.vpc_id
+
+}
+
+
+# Route Table Module
+
+module "route_table" {
+
+  source = "./modules/route_table"
+
+
+  vpc_id = module.vpc.vpc_id
+
+
+  internet_gateway_id = module.internet_gateway.igw_id
+
+
+  public_subnet_id = module.subnet.public_subnet_id
+
+
+  private_subnet_id = module.subnet.private_subnet_id
+
+}
+
 
 module "security_group" {
 
@@ -32,11 +63,13 @@ module "security_group" {
 }
 
 
+
 module "iam" {
 
   source = "./modules/iam"
 
 }
+
 
 
 module "ec2" {
@@ -60,6 +93,5 @@ module "ec2" {
   instance_type = var.instance_type
 
   key_name = var.key_name
-
 
 }
