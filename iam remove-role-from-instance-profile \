@@ -1,0 +1,31 @@
+{
+    "InstanceProfile": {
+        "Path": "/",
+        "InstanceProfileName": "Terraform-Profile-2",
+        "InstanceProfileId": "AIPAYFGEFSFFKKFFVQ23D",
+        "Arn": "arn:aws:iam::560904638794:instance-profile/Terraform-Profile-2",
+        "CreateDate": "2026-07-09T20:11:46+00:00",
+        "Roles": [
+            {
+                "Path": "/",
+                "RoleName": "Terraform-EC2-Role-2",
+                "RoleId": "AROAYFGEFSFFKQ36VPNFM",
+                "Arn": "arn:aws:iam::560904638794:role/Terraform-EC2-Role-2",
+                "CreateDate": "2026-07-09T20:11:45+00:00",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ec2.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Tags": []
+    }
+}
