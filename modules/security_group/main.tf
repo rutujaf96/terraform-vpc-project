@@ -1,8 +1,10 @@
 resource "aws_security_group" "dev_sg" {
+
   name   = "Dev-SG"
-  vpc_id = aws_vpc.dev_vpc.id
+  vpc_id = var.vpc_id
 
   ingress {
+    description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -10,6 +12,7 @@ resource "aws_security_group" "dev_sg" {
   }
 
   ingress {
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -17,6 +20,7 @@ resource "aws_security_group" "dev_sg" {
   }
 
   ingress {
+    description = "Jenkins"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
@@ -33,4 +37,5 @@ resource "aws_security_group" "dev_sg" {
   tags = {
     Name = "Dev-SG"
   }
+
 }

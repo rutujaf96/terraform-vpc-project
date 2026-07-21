@@ -2,13 +2,11 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+.terraform.lock.hcl
+
+# Terraform crash logs
 crash.log
 
-# Terraform variables with secrets
-*.tfvars
-
-# SSH keys
+# Sensitive files
 *.pem
-
-# Ansible temporary files
-*.retry
+*.key

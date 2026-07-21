@@ -17,7 +17,7 @@ module "subnet" {
 
   private_subnet = var.private_subnet
 
-  availability_zone_public  = var.availability_zone_public
+  availability_zone_public = var.availability_zone_public
 
   availability_zone_private = var.availability_zone_private
 
