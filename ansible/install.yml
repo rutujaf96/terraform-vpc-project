@@ -1,5 +1,5 @@
 ---
-- name: Install Java and Docker
+- name: Install Java, Docker and AWS CLI
   hosts: web
   become: yes
 
@@ -8,18 +8,22 @@
     - name: Update apt cache
       apt:
         update_cache: yes
+        cache_valid_time: 3600
 
     - name: Install Java
       apt:
         name: openjdk-21-jdk
         state: present
 
-    - name: Install Docker
+    - name: Install Docker and required packages
       apt:
-        name: docker.io
+        name:
+          - docker.io
+          - curl
+          - unzip
         state: present
 
-    - name: Start Docker
+    - name: Start and enable Docker
       service:
         name: docker
         state: started
@@ -30,3 +34,36 @@
         name: ubuntu
         groups: docker
         append: yes
+
+    - name: Check whether AWS CLI is already installed
+      command: aws --version
+      register: aws_cli_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download AWS CLI v2
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+      when: aws_cli_check.rc != 0
+
+    - name: Extract AWS CLI installer
+      unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: yes
+      when: aws_cli_check.rc != 0
+
+    - name: Install AWS CLI v2
+      command: /tmp/aws/install
+      when: aws_cli_check.rc != 0
+
+    - name: Verify AWS CLI installation
+      command: aws --version
+      register: aws_cli_version
+      changed_when: false
+
+    - name: Show AWS CLI version
+      debug:
+        var: aws_cli_version.stdout
