@@ -1,12 +1,46 @@
-# Terraform files
+# Terraform working directory
 .terraform/
+
+# Terraform state files
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
+
+# Terraform plan files
+*.tfplan
+tfplan
+tfdestroyplan
 
 # Terraform crash logs
 crash.log
+crash.*.log
+
+# Terraform variable files containing sensitive values
+*.tfvars
+*.tfvars.json
+
+# Keep example variable files
+!example.tfvars
+!*.tfvars.example
+
+# Generated Lambda deployment package
+modules/lambda/lambda_function.zip
+
+# Lambda/Jenkins response files
+lambda-response.json
+response.json
 
 # Sensitive files
 *.pem
 *.key
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# Generated Ansible inventory
+ansible/hosts
+
+# Editor and operating system files
+.DS_Store
+*.swp
+*.swo
