@@ -73,25 +73,33 @@ module "iam" {
 
 
 module "ec2" {
-
   source = "./modules/ec2"
 
-
   subnet_id = module.subnet.public_subnet_id
-
 
   security_group_ids = [
     module.security_group.security_group_id
   ]
 
-
   iam_instance_profile = module.iam.instance_profile_name
 
-
-  ami_id = var.ami_id
-
+  ami_id        = var.ami_id
   instance_type = var.instance_type
+  key_name      = var.key_name
+}
 
-  key_name = var.key_name
 
+
+module "lambda_url_checker" {
+  source = "./modules/lambda"
+
+  function_name = "springboot-url-checker"
+
+  application_url = "http://${module.ec2.public_ip}:8080"
+
+  runtime     = "python3.12"
+  timeout     = 15
+  memory_size = 128
+
+  log_retention_days = 7
 }
