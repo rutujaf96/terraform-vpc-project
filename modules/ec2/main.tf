@@ -1,5 +1,4 @@
 resource "aws_instance" "dev_ec2" {
-
   ami           = var.ami_id
   instance_type = var.instance_type
 
@@ -13,8 +12,14 @@ resource "aws_instance" "dev_ec2" {
 
   key_name = var.key_name
 
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    delete_on_termination = true
+    encrypted             = true
+  }
+
   tags = {
     Name = "Terraform-EC2"
   }
-
 }
