@@ -4,12 +4,12 @@ resource "aws_security_group" "dev_sg" {
   vpc_id = var.vpc_id
 
   ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
+    description = "Allow Spring Boot Kubernetes NodePort"
+    from_port   = 30080
+    to_port     = 30080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }
+  }  
 
   ingress {
     description = "HTTP"

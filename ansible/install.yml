@@ -1,5 +1,5 @@
 ---
-- name: Install Java, Docker and AWS CLI
+- name: Install Java, Docker, AWS CLI, kubectl and Minikube
   hosts: web
   become: yes
 
@@ -10,17 +10,15 @@
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Install Java
-      apt:
-        name: openjdk-21-jdk
-        state: present
-
-    - name: Install Docker and required packages
+    - name: Install required packages
       apt:
         name:
+          - openjdk-21-jdk
           - docker.io
           - curl
           - unzip
+          - conntrack
+          - socat
         state: present
 
     - name: Start and enable Docker
@@ -35,7 +33,7 @@
         groups: docker
         append: yes
 
-    - name: Check whether AWS CLI is already installed
+    - name: Check AWS CLI
       command: aws --version
       register: aws_cli_check
       changed_when: false
@@ -48,22 +46,53 @@
         mode: '0644'
       when: aws_cli_check.rc != 0
 
-    - name: Extract AWS CLI installer
+    - name: Extract AWS CLI
       unarchive:
         src: /tmp/awscliv2.zip
         dest: /tmp
         remote_src: yes
       when: aws_cli_check.rc != 0
 
-    - name: Install AWS CLI v2
+    - name: Install AWS CLI
       command: /tmp/aws/install
       when: aws_cli_check.rc != 0
 
-    - name: Verify AWS CLI installation
-      command: aws --version
-      register: aws_cli_version
+    - name: Install kubectl
+      get_url:
+        url: https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+
+    - name: Install Minikube
+      get_url:
+        url: https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+
+    - name: Verify Docker
+      command: docker --version
+      register: docker_version
       changed_when: false
 
-    - name: Show AWS CLI version
+    - name: Verify AWS CLI
+      command: aws --version
+      register: aws_version
+      changed_when: false
+
+    - name: Verify kubectl
+      command: kubectl version --client
+      register: kubectl_version
+      changed_when: false
+
+    - name: Verify Minikube
+      command: minikube version
+      register: minikube_version
+      changed_when: false
+
+    - name: Show installed versions
       debug:
-        var: aws_cli_version.stdout
+        msg:
+          - "{{ docker_version.stdout }}"
+          - "{{ aws_version.stdout }}"
+          - "{{ kubectl_version.stdout }}"
+          - "{{ minikube_version.stdout }}"
