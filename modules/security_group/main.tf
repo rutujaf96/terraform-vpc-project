@@ -1,7 +1,14 @@
 resource "aws_security_group" "dev_sg" {
-
   name   = "Dev-SG"
   vpc_id = var.vpc_id
+
+  ingress {
+    description = "Allow SSH from Jenkins"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     description = "Allow Spring Boot Kubernetes NodePort"
@@ -9,7 +16,7 @@ resource "aws_security_group" "dev_sg" {
     to_port     = 30080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }  
+  }
 
   ingress {
     description = "HTTP"
@@ -20,7 +27,7 @@ resource "aws_security_group" "dev_sg" {
   }
 
   ingress {
-    description = "Jenkins"
+    description = "Spring Boot Application and Lambda"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
@@ -37,5 +44,4 @@ resource "aws_security_group" "dev_sg" {
   tags = {
     Name = "Dev-SG"
   }
-
 }
