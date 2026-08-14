@@ -763,6 +763,266 @@ EOF
             }
         }
 
+stage('Verify Monitoring Files') {
+    steps {
+        echo 'Checking Prometheus, Grafana and dashboard files...'
+
+        sh '''
+            set -e
+
+            test -f monitoring/prometheus.yaml
+            test -f monitoring/grafana.yaml
+            test -f monitoring/dashboards/cpu-dashboard.json
+            test -f monitoring/dashboards/memory-dashboard.json
+            test -f monitoring/systemd/prometheus-port-forward.service
+            test -f monitoring/systemd/grafana-port-forward.service
+
+            echo "All monitoring files are available."
+
+            tree monitoring
+        '''
+    }
+}
+
+       stage('Copy Monitoring Files') {
+    steps {
+        echo 'Copying monitoring files to deployment EC2...'
+
+        sshagent(credentials: ['agent-key']) {
+            sh '''
+                set -e
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    "
+                        mkdir -p /home/ubuntu/monitoring/dashboards
+                        mkdir -p /home/ubuntu/monitoring/systemd
+                    "
+
+                scp \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    monitoring/prometheus.yaml \
+                    monitoring/grafana.yaml \
+                    "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/"
+
+                scp \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    monitoring/dashboards/*.json \
+                    "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/dashboards/"
+
+                scp \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    monitoring/systemd/*.service \
+                    "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/systemd/"
+            '''
+        }
+    }
+}
+
+        stage('Deploy Prometheus') {
+    steps {
+        echo 'Deploying Prometheus to Minikube...'
+
+        sshagent(credentials: ['agent-key']) {
+            sh '''
+                set -e
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    '
+                        set -e
+
+                        kubectl apply \
+                            -f /home/ubuntu/monitoring/prometheus.yaml
+
+                        kubectl rollout status \
+                            deployment/prometheus \
+                            -n kube-system \
+                            --timeout=300s
+
+                        kubectl get pods \
+                            -n kube-system \
+                            -l app=prometheus
+
+                        kubectl get svc \
+                            prometheus \
+                            -n kube-system
+                    '
+            '''
+        }
+    }
+}
+
+        stage('Create Grafana Dashboards ConfigMap') {
+    steps {
+        echo 'Creating Grafana dashboard ConfigMap...'
+
+        sshagent(credentials: ['agent-key']) {
+            sh '''
+                set -e
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    '
+                        set -e
+
+                        kubectl create configmap \
+                            grafana-dashboards \
+                            -n kube-system \
+                            --from-file=/home/ubuntu/monitoring/dashboards/cpu-dashboard.json \
+                            --from-file=/home/ubuntu/monitoring/dashboards/memory-dashboard.json \
+                            --dry-run=client \
+                            -o yaml \
+                        | kubectl apply -f -
+                    '
+            '''
+        }
+    }
+}
+
+        stage('Deploy Grafana') {
+    steps {
+        echo 'Deploying Grafana to Minikube...'
+
+        sshagent(credentials: ['agent-key']) {
+            sh '''
+                set -e
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    '
+                        set -e
+
+                        kubectl apply \
+                            -f /home/ubuntu/monitoring/grafana.yaml
+
+                        kubectl rollout restart \
+                            deployment/grafana \
+                            -n kube-system
+
+                        kubectl rollout status \
+                            deployment/grafana \
+                            -n kube-system \
+                            --timeout=300s
+
+                        kubectl get pods \
+                            -n kube-system \
+                            -l app=grafana
+
+                        kubectl get svc \
+                            grafana \
+                            -n kube-system
+                    '
+            '''
+        }
+    }
+}
+
+        stage('Expose Monitoring Services') {
+    steps {
+        echo 'Configuring Prometheus and Grafana port-forward services...'
+
+        sshagent(credentials: ['agent-key']) {
+            sh '''
+                set -e
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    '
+                        set -e
+
+                        sudo cp \
+                            /home/ubuntu/monitoring/systemd/prometheus-port-forward.service \
+                            /etc/systemd/system/prometheus-port-forward.service
+
+                        sudo cp \
+                            /home/ubuntu/monitoring/systemd/grafana-port-forward.service \
+                            /etc/systemd/system/grafana-port-forward.service
+
+                        sudo systemctl daemon-reload
+
+                        sudo systemctl enable prometheus-port-forward
+                        sudo systemctl enable grafana-port-forward
+
+                        sudo systemctl restart prometheus-port-forward
+                        sudo systemctl restart grafana-port-forward
+
+                        sleep 5
+
+                        sudo systemctl status \
+                            prometheus-port-forward \
+                            --no-pager
+
+                        sudo systemctl status \
+                            grafana-port-forward \
+                            --no-pager
+                    '
+            '''
+        }
+    }
+}
+
+       stage('Verify Monitoring') {
+    steps {
+        echo 'Verifying Prometheus and Grafana...'
+
+        sshagent(credentials: ['agent-key']) {
+            sh '''
+                set -e
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    '
+                        set -e
+
+                        echo "Checking Prometheus..."
+
+                        curl \
+                            --retry 20 \
+                            --retry-delay 5 \
+                            --retry-connrefused \
+                            -f \
+                            http://localhost:9090/-/ready
+
+                        echo
+                        echo "Checking Grafana..."
+
+                        curl \
+                            --retry 20 \
+                            --retry-delay 5 \
+                            --retry-connrefused \
+                            -f \
+                            http://localhost:3000/api/health
+
+                        echo
+                        echo "Checking cAdvisor target..."
+
+                        curl -s \
+                            "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22kubernetes-cadvisor%22%7D"
+
+                        echo
+                        echo "Monitoring verification completed."
+                    '
+            '''
+        }
+    }
+}
+
         stage('Invoke Lambda URL Check') {
             steps {
                 echo 'Invoking Lambda to hit the Kubernetes application URL...'
@@ -832,6 +1092,8 @@ EOF
             echo 'Application returned HTTP 200.'
             echo 'Lambda URL test returned statusCode 200.'
             echo "Application URL: http://${env.EC2_IP}:${env.HOST_PORT}"
+            echo "Prometheus URL: http://${env.EC2_IP}:9090"
+            echo "Grafana URL: http://${env.EC2_IP}:3000"
             echo "Lambda Function: ${env.LAMBDA_NAME}"
             echo '============================================='
         }
@@ -850,3 +1112,4 @@ EOF
         }
     }
 }
+ 

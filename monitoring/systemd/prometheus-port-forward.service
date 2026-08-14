@@ -1,0 +1,19 @@
+[Unit]
+Description=Prometheus Kubernetes Port Forward
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=KUBECONFIG=/home/ubuntu/.kube/config
+
+ExecStart=KUBECTL_BINARY port-forward --namespace=kube-system --address=0.0.0.0 service/prometheus 9090:9090
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

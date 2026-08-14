@@ -1,0 +1,272 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+
+  - nonResourceURLs:
+      - /metrics
+    verbs:
+      - get
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: kube-system
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+
+      # Prometheus monitors itself
+      - job_name: prometheus
+        static_configs:
+          - targets:
+              - localhost:9090
+
+      # Scrape annotated Kubernetes Pods
+      - job_name: kubernetes-pods
+
+        kubernetes_sd_configs:
+          - role: pod
+
+        relabel_configs:
+          # Scrape only Pods having:
+          # prometheus.io/scrape: "true"
+          - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+            action: keep
+            regex: "true"
+
+          # Metrics path from:
+          # prometheus.io/path
+          - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_path
+            action: replace
+            target_label: __metrics_path__
+            regex: "(.+)"
+
+          # Metrics port from:
+          # prometheus.io/port
+          - source_labels:
+              - __address__
+              - __meta_kubernetes_pod_annotation_prometheus_io_port
+            action: replace
+            regex: "([^:]+)(?::\\d+)?;(\\d+)"
+            replacement: "$1:$2"
+            target_label: __address__
+
+          - source_labels:
+              - __meta_kubernetes_namespace
+            action: replace
+            target_label: kubernetes_namespace
+
+          - source_labels:
+              - __meta_kubernetes_pod_name
+            action: replace
+            target_label: kubernetes_pod_name
+
+          - source_labels:
+              - __meta_kubernetes_pod_label_app
+            action: replace
+            target_label: application
+
+      # Scrape kubelet cAdvisor metrics
+      # This provides container CPU, memory and network metrics
+      - job_name: kubernetes-cadvisor
+
+        scheme: https
+
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: false
+
+        kubernetes_sd_configs:
+          - role: node
+
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+          # Send requests through Kubernetes API server
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+
+          # Build kubelet cAdvisor proxy URL dynamically
+          - source_labels:
+              - __meta_kubernetes_node_name
+            target_label: __metrics_path__
+            regex: (.+)
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: kube-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: kube-system
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: prometheus
+
+  strategy:
+    type: Recreate
+
+  template:
+    metadata:
+      labels:
+        app: prometheus
+
+    spec:
+      serviceAccountName: prometheus
+
+      securityContext:
+        fsGroup: 65534
+
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          imagePullPolicy: IfNotPresent
+
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --web.enable-lifecycle
+
+          ports:
+            - name: web
+              containerPort: 9090
+              protocol: TCP
+
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: web
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: web
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+              readOnly: true
+
+            - name: prometheus-data
+              mountPath: /prometheus
+
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+
+        - name: prometheus-data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: kube-system
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+
+  selector:
+    app: prometheus
+
+  ports:
+    - name: web
+      port: 9090
+      targetPort: web
+      protocol: TCP

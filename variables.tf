@@ -51,3 +51,4 @@ variable "key_name" {
   type        = string
   default     = "agent-key"
 }
+
