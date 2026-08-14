@@ -10,7 +10,7 @@ User=ubuntu
 Environment=HOME=/home/ubuntu
 Environment=KUBECONFIG=/home/ubuntu/.kube/config
 
-ExecStart=KUBECTL_BINARY port-forward --namespace=kube-system --address=0.0.0.0 service/grafana 3000:3000
+ExecStart=/usr/local/bin/kubectl port-forward --namespace=kube-system --address=0.0.0.0 service/grafana 3000:3000
 
 Restart=always
 RestartSec=10
