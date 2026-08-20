@@ -1044,7 +1044,8 @@ stage('Deploy Prometheus') {
 }
 
        
-        stage('Verify Monitoring') {
+
+stage('Verify Monitoring') {
     steps {
         echo 'Verifying Prometheus, Grafana and Spring Boot pod metrics...'
 
@@ -1056,182 +1057,230 @@ stage('Deploy Prometheus') {
                     -o StrictHostKeyChecking=no \
                     -o UserKnownHostsFile=/dev/null \
                     "${SSH_USER}@${EC2_IP}" \
-                    '
-                        set -e
+                    "K8S_NAMESPACE='${K8S_NAMESPACE}' K8S_DEPLOYMENT='${K8S_DEPLOYMENT}' bash -s" <<'REMOTE_SCRIPT'
 
-                        echo "============================================="
-                        echo "1. Checking Prometheus readiness..."
-                        echo "============================================="
+set -e
 
-                        curl \
-                            --retry 20 \
-                            --retry-delay 5 \
-                            --retry-connrefused \
-                            -f \
-                            http://localhost:9090/-/ready
+echo "============================================="
+echo "1. Checking Prometheus readiness"
+echo "============================================="
 
-                        echo
-                        echo "Prometheus is Ready."
+curl \
+    --retry 20 \
+    --retry-delay 5 \
+    --retry-connrefused \
+    -f \
+    http://localhost:9090/-/ready
 
-
-                        echo
-                        echo "============================================="
-                        echo "2. Checking Grafana health..."
-                        echo "============================================="
-
-                        curl \
-                            --retry 20 \
-                            --retry-delay 5 \
-                            --retry-connrefused \
-                            -f \
-                            http://localhost:3000/api/health
-
-                        echo
-                        echo "Grafana is Healthy."
+echo
+echo "Prometheus is READY."
 
 
-                        echo
-                        echo "============================================="
-                        echo "3. Checking cAdvisor target..."
-                        echo "============================================="
+echo
+echo "============================================="
+echo "2. Checking Grafana health"
+echo "============================================="
 
-                        CADVISOR_RESPONSE=$(curl -G -s \
-                            --data-urlencode '\''query=up{job="kubernetes-cadvisor"}'\'' \
-                            http://localhost:9090/api/v1/query)
+curl \
+    --retry 20 \
+    --retry-delay 5 \
+    --retry-connrefused \
+    -f \
+    http://localhost:3000/api/health
 
-                        echo "${CADVISOR_RESPONSE}"
-
-                        echo "${CADVISOR_RESPONSE}" | grep -q '"value".*"1"' || {
-                            echo "ERROR: Kubernetes cAdvisor target is not UP."
-                            exit 1
-                        }
-
-                        echo "cAdvisor target is UP."
+echo
+echo "Grafana is READY."
 
 
-                        echo
-                        echo "============================================="
-                        echo "4. Checking Spring Boot application pods..."
-                        echo "============================================="
+echo
+echo "============================================="
+echo "3. Checking Prometheus Recording Rules"
+echo "============================================="
 
-                        kubectl get pods \
-                            -n springboot \
-                            -l app=springboot-app \
-                            -o wide
+kubectl get configmap \
+    prometheus-rules \
+    -n kube-system
 
-                        APP_POD_COUNT=$(kubectl get pods \
-                            -n springboot \
-                            -l app=springboot-app \
-                            --field-selector=status.phase=Running \
-                            --no-headers 2>/dev/null \
-                            | wc -l)
+kubectl exec \
+    -n kube-system \
+    deployment/prometheus \
+    -- ls -l /etc/prometheus/rules
 
-                        echo "Running Spring Boot pods: ${APP_POD_COUNT}"
-
-                        if [ "${APP_POD_COUNT}" -lt 1 ]; then
-                            echo "ERROR: No running Spring Boot application pod found."
-                            exit 1
-                        fi
+echo
+echo "Prometheus recording rules are available."
 
 
-                        echo
-                        echo "============================================="
-                        echo "5. Checking Spring Boot CPU metrics..."
-                        echo "============================================="
+echo
+echo "============================================="
+echo "4. Checking Prometheus Pod"
+echo "============================================="
 
-                        CPU_RESPONSE=$(curl -G -s \
-                            --data-urlencode '\''query=sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="springboot",pod=~"springboot-app-.*"}[2m])) * 100'\'' \
-                            http://localhost:9090/api/v1/query)
-
-                        echo "${CPU_RESPONSE}"
-
-                        echo "${CPU_RESPONSE}" | grep -q "springboot-app-" || {
-                            echo "ERROR: Spring Boot CPU metrics not found in Prometheus."
-                            exit 1
-                        }
-
-                        echo "Spring Boot CPU metrics are available."
+kubectl get pods \
+    -n kube-system \
+    -l app=prometheus \
+    -o wide
 
 
-                        echo
-                        echo "============================================="
-                        echo "6. Checking Spring Boot Memory metrics..."
-                        echo "============================================="
+echo
+echo "============================================="
+echo "5. Checking Grafana Pod"
+echo "============================================="
 
-                        MEMORY_RESPONSE=$(curl -G -s \
-                            --data-urlencode '\''query=sum by (pod) (container_memory_working_set_bytes{namespace="springboot",pod=~"springboot-app-.*"})'\'' \
-                            http://localhost:9090/api/v1/query)
-
-                        echo "${MEMORY_RESPONSE}"
-
-                        echo "${MEMORY_RESPONSE}" | grep -q "springboot-app-" || {
-                            echo "ERROR: Spring Boot Memory metrics not found in Prometheus."
-                            exit 1
-                        }
-
-                        echo "Spring Boot Memory metrics are available."
+kubectl get pods \
+    -n kube-system \
+    -l app=grafana \
+    -o wide
 
 
-                        echo
-                        echo "============================================="
-                        echo "7. Checking Grafana dashboard ConfigMap..."
-                        echo "============================================="
+echo
+echo "============================================="
+echo "6. Checking Spring Boot Application Pods"
+echo "============================================="
 
-                        kubectl get configmap \
-                            grafana-dashboards \
-                            -n kube-system
+kubectl get pods \
+    -n "${K8S_NAMESPACE}" \
+    -l app="${K8S_DEPLOYMENT}" \
+    -o wide
 
-                        DASHBOARD_COUNT=$(kubectl get configmap \
-                            grafana-dashboards \
-                            -n kube-system \
-                            -o jsonpath="{.data}" \
-                            | grep -o "dashboard.json" \
-                            | wc -l \
-                            || true)
+APP_POD_COUNT="$(kubectl get pods \
+    -n "${K8S_NAMESPACE}" \
+    -l app="${K8S_DEPLOYMENT}" \
+    --field-selector=status.phase=Running \
+    --no-headers 2>/dev/null \
+    | wc -l)"
 
-                        echo "Grafana dashboard ConfigMap exists."
+echo "Running Spring Boot pods: ${APP_POD_COUNT}"
 
-
-                        echo
-                        echo "============================================="
-                        echo "8. Checking dashboards inside Grafana pod..."
-                        echo "============================================="
-
-                        kubectl exec \
-                            -n kube-system \
-                            deployment/grafana \
-                            -- ls -lh /etc/grafana/provisioned-dashboards
-
-                        kubectl exec \
-                            -n kube-system \
-                            deployment/grafana \
-                            -- test -f /etc/grafana/provisioned-dashboards/cpu-dashboard.json
-
-                        kubectl exec \
-                            -n kube-system \
-                            deployment/grafana \
-                            -- test -f /etc/grafana/provisioned-dashboards/memory-dashboard.json
-
-                        echo "CPU and Memory dashboard files are mounted successfully."
+if [ "${APP_POD_COUNT}" -lt 1 ]; then
+    echo "ERROR: No running Spring Boot application pod found."
+    exit 1
+fi
 
 
-                        echo
-                        echo "============================================="
-                        echo "MONITORING VERIFICATION SUCCESSFUL"
-                        echo "============================================="
-                        echo "Prometheus             : READY"
-                        echo "Grafana                : HEALTHY"
-                        echo "cAdvisor               : UP"
-                        echo "Spring Boot Pods       : RUNNING"
-                        echo "Spring Boot CPU Data   : AVAILABLE"
-                        echo "Spring Boot Memory Data: AVAILABLE"
-                        echo "Grafana Dashboards     : AVAILABLE"
-                        echo "============================================="
-                    '
+echo
+echo "============================================="
+echo "7. Checking cAdvisor Target"
+echo "============================================="
+
+CADVISOR_RESULT="$(curl -sG \
+    http://localhost:9090/api/v1/query \
+    --data-urlencode 'query=up{job="kubernetes-cadvisor"}')"
+
+echo "${CADVISOR_RESULT}"
+
+echo "${CADVISOR_RESULT}" | grep -q '"value":.*"1"' || {
+    echo "ERROR: Kubernetes cAdvisor target is not UP."
+    exit 1
+}
+
+echo
+echo "cAdvisor target is UP."
+
+
+echo
+echo "============================================="
+echo "8. Checking Spring Boot CPU Recording Rule"
+echo "============================================="
+
+CPU_RESULT="$(curl -sG \
+    http://localhost:9090/api/v1/query \
+    --data-urlencode 'query=springboot:pod_cpu_usage_percent')"
+
+echo "${CPU_RESULT}"
+
+echo "${CPU_RESULT}" | grep -q '"status":"success"' || {
+    echo "ERROR: CPU recording rule query failed."
+    exit 1
+}
+
+echo "${CPU_RESULT}" | grep -q "springboot-app-" || {
+    echo "ERROR: CPU recording rule returned no Spring Boot pod data."
+    exit 1
+}
+
+echo
+echo "Spring Boot CPU recording rule is working."
+
+
+echo
+echo "============================================="
+echo "9. Checking Spring Boot Memory Recording Rule"
+echo "============================================="
+
+MEMORY_RESULT="$(curl -sG \
+    http://localhost:9090/api/v1/query \
+    --data-urlencode 'query=springboot:pod_memory_usage_bytes')"
+
+echo "${MEMORY_RESULT}"
+
+echo "${MEMORY_RESULT}" | grep -q '"status":"success"' || {
+    echo "ERROR: Memory recording rule query failed."
+    exit 1
+}
+
+echo "${MEMORY_RESULT}" | grep -q "springboot-app-" || {
+    echo "ERROR: Memory recording rule returned no Spring Boot pod data."
+    exit 1
+}
+
+echo
+echo "Spring Boot Memory recording rule is working."
+
+
+echo
+echo "============================================="
+echo "10. Checking Grafana Dashboard ConfigMap"
+echo "============================================="
+
+kubectl get configmap \
+    grafana-dashboards \
+    -n kube-system
+
+
+echo
+echo "============================================="
+echo "11. Checking Grafana Dashboard Files"
+echo "============================================="
+
+kubectl exec \
+    -n kube-system \
+    deployment/grafana \
+    -- ls -lh /etc/grafana/provisioned-dashboards
+
+kubectl exec \
+    -n kube-system \
+    deployment/grafana \
+    -- test -f /etc/grafana/provisioned-dashboards/cpu-dashboard.json
+
+kubectl exec \
+    -n kube-system \
+    deployment/grafana \
+    -- test -f /etc/grafana/provisioned-dashboards/memory-dashboard.json
+
+echo
+echo "Grafana dashboard files are available."
+
+
+echo
+echo "============================================="
+echo "MONITORING VERIFICATION SUCCESSFUL"
+echo "============================================="
+echo "Prometheus              : READY"
+echo "Grafana                 : READY"
+echo "Recording Rules         : LOADED"
+echo "cAdvisor                : UP"
+echo "Spring Boot Pods        : RUNNING"
+echo "CPU Recording Rule      : WORKING"
+echo "Memory Recording Rule   : WORKING"
+echo "Grafana Dashboards      : AVAILABLE"
+echo "============================================="
+
+REMOTE_SCRIPT
             '''
         }
     }
 }
+      
 
 
         stage('Invoke Lambda URL Check') {
