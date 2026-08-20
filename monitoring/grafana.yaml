@@ -20,11 +20,34 @@ data:
 
     datasources:
       - name: Prometheus
+        uid: prometheus
         type: prometheus
         access: proxy
         url: http://prometheus:9090
         isDefault: true
         editable: true
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: kube-system
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+
+    providers:
+      - name: "Spring Boot Monitoring"
+        orgId: 1
+        folder: "Spring Boot Monitoring"
+        type: file
+        disableDeletion: false
+        editable: true
+        updateIntervalSeconds: 10
+
+        options:
+          path: /etc/grafana/provisioned-dashboards
 
 ---
 apiVersion: v1
@@ -35,6 +58,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+
   resources:
     requests:
       storage: 1Gi
@@ -45,17 +69,19 @@ kind: Deployment
 metadata:
   name: grafana
   namespace: kube-system
+
   labels:
     app: grafana
+
 spec:
   replicas: 1
+
+  strategy:
+    type: Recreate
 
   selector:
     matchLabels:
       app: grafana
-
-  strategy:
-    type: Recreate
 
   template:
     metadata:
@@ -63,11 +89,14 @@ spec:
         app: grafana
 
     spec:
+
       securityContext:
         fsGroup: 472
 
       containers:
+
         - name: grafana
+
           image: grafana/grafana:latest
           imagePullPolicy: IfNotPresent
 
@@ -77,6 +106,7 @@ spec:
               protocol: TCP
 
           env:
+
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 secretKeyRef:
@@ -96,6 +126,7 @@ spec:
             httpGet:
               path: /api/health
               port: web
+
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
@@ -105,6 +136,7 @@ spec:
             httpGet:
               path: /api/health
               port: web
+
             initialDelaySeconds: 45
             periodSeconds: 15
             timeoutSeconds: 5
@@ -114,19 +146,34 @@ spec:
             requests:
               cpu: 100m
               memory: 128Mi
+
             limits:
               cpu: 500m
               memory: 512Mi
 
           volumeMounts:
+
+            # Grafana persistent data
             - name: grafana-data
               mountPath: /var/lib/grafana
 
+            # Prometheus datasource provisioning
             - name: grafana-datasource
               mountPath: /etc/grafana/provisioning/datasources
               readOnly: true
 
+            # Dashboard provider configuration
+            - name: grafana-dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+
+            # Dashboard JSON files
+            - name: grafana-dashboards
+              mountPath: /etc/grafana/provisioned-dashboards
+              readOnly: true
+
       volumes:
+
         - name: grafana-data
           persistentVolumeClaim:
             claimName: grafana-data
@@ -135,14 +182,24 @@ spec:
           configMap:
             name: grafana-datasource
 
+        - name: grafana-dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-dashboards
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: grafana
   namespace: kube-system
+
   labels:
     app: grafana
+
 spec:
   type: ClusterIP
 
@@ -150,6 +207,7 @@ spec:
     app: grafana
 
   ports:
+
     - name: web
       port: 3000
       targetPort: web
