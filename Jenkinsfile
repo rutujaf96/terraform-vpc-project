@@ -793,39 +793,88 @@ stage('Verify Monitoring Files') {
             sh '''
                 set -e
 
+                echo "Creating monitoring directories on target EC2..."
+
                 ssh \
                     -o StrictHostKeyChecking=no \
                     -o UserKnownHostsFile=/dev/null \
                     "${SSH_USER}@${EC2_IP}" \
                     "
+                        set -e
+
+                        mkdir -p /home/ubuntu/monitoring
                         mkdir -p /home/ubuntu/monitoring/dashboards
                         mkdir -p /home/ubuntu/monitoring/systemd
                     "
 
+                echo "Copying Prometheus, Prometheus rules and Grafana YAML files..."
+
                 scp \
                     -o StrictHostKeyChecking=no \
                     -o UserKnownHostsFile=/dev/null \
-                    monitoring/prometheus-rules.yaml \
                     monitoring/prometheus.yaml \
+                    monitoring/prometheus-rules.yaml \
                     monitoring/grafana.yaml \
                     "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/"
 
-                scp \
-                    -o StrictHostKeyChecking=no \
-                    -o UserKnownHostsFile=/dev/null \
-                    monitoring/dashboards/*.json \
-                    "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/dashboards/"
+                echo "Copying Grafana dashboard JSON files..."
 
                 scp \
                     -o StrictHostKeyChecking=no \
                     -o UserKnownHostsFile=/dev/null \
-                    monitoring/systemd/*.service \
+                    monitoring/dashboards/cpu-dashboard.json \
+                    monitoring/dashboards/memory-dashboard.json \
+                    "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/dashboards/"
+
+                echo "Copying Prometheus and Grafana systemd service files..."
+
+                scp \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    monitoring/systemd/prometheus-port-forward.service \
+                    monitoring/systemd/grafana-port-forward.service \
                     "${SSH_USER}@${EC2_IP}:/home/ubuntu/monitoring/systemd/"
+
+                echo "Verifying copied monitoring files on target EC2..."
+
+                ssh \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "${SSH_USER}@${EC2_IP}" \
+                    "
+                        set -e
+
+                        test -f /home/ubuntu/monitoring/prometheus.yaml
+                        test -f /home/ubuntu/monitoring/prometheus-rules.yaml
+                        test -f /home/ubuntu/monitoring/grafana.yaml
+
+                        test -f /home/ubuntu/monitoring/dashboards/cpu-dashboard.json
+                        test -f /home/ubuntu/monitoring/dashboards/memory-dashboard.json
+
+                        test -f /home/ubuntu/monitoring/systemd/prometheus-port-forward.service
+                        test -f /home/ubuntu/monitoring/systemd/grafana-port-forward.service
+
+                        echo '============================================='
+                        echo 'Monitoring files copied successfully.'
+                        echo '============================================='
+
+                        echo 'Main monitoring files:'
+                        ls -lh /home/ubuntu/monitoring/
+
+                        echo
+                        echo 'Grafana dashboards:'
+                        ls -lh /home/ubuntu/monitoring/dashboards/
+
+                        echo
+                        echo 'Systemd services:'
+                        ls -lh /home/ubuntu/monitoring/systemd/
+                    "
+
+                echo "Copy Monitoring Files stage completed successfully."
             '''
         }
     }
 }
-
         
 stage('Deploy Prometheus') {
     steps {
