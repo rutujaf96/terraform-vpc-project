@@ -45,7 +45,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"springboot\",pod=~\"springboot-app-.*\"}[5m])) * 100",
+          "expr": "springboot:pod_cpu_usage_percent",
           "legendFormat": "{{pod}}",
           "range": true,
           "refId": "A"
@@ -93,7 +93,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"springboot\",pod=~\"springboot-app-.*\"}[2m])) * 100",
+          "expr": "springboot:pod_cpu_usage_percent",
           "legendFormat": "{{pod}}",
           "range": true,
           "refId": "A"

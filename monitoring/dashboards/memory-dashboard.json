@@ -45,7 +45,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"springboot\",pod=~\"springboot-app-.*\"})",
+          "expr": "springboot:pod_memory_usage_bytes",
           "legendFormat": "{{pod}}",
           "range": true,
           "refId": "A"
@@ -93,9 +93,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "editorMode": "code",
-          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"springboot\",pod=~\"springboot-app-.*\"})",
-          "legendFormat": "{{pod}}",
+          "editorMode":"code",
+          "expr": "springboot:pod_memory_usage_bytes",          
+	  "legendFormat": "{{pod}}",
           "range": true,
           "refId": "A"
         }
