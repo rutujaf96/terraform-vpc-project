@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: kube-system
+
+data:
+  springboot-rules.yml: |
+    groups:
+      - name: springboot-monitoring
+        interval: 15s
+
+        rules:
+
+          # Spring Boot Pod CPU Usage Percentage
+          - record: springboot:pod_cpu_usage_percent
+            expr: |
+              sum by (pod) (
+                rate(
+                  container_cpu_usage_seconds_total{
+                    namespace="springboot",
+                    pod=~"springboot-app-.*"
+                  }[2m]
+                )
+              ) * 100
+
+          # Spring Boot Pod Memory Usage in Bytes
+          - record: springboot:pod_memory_usage_bytes
+            expr: |
+              sum by (pod) (
+                container_memory_working_set_bytes{
+                  namespace="springboot",
+                  pod=~"springboot-app-.*"
+                }
+              )
